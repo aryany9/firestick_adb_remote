@@ -51,7 +51,7 @@ jobs:
       - name: Create key.properties
         run: |
           cat <<EOF > android/key.properties
-          storeFile=upload-keystore.jks
+          storeFile=fireadbmote-keystore.jks
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
           keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
