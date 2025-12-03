@@ -46,7 +46,7 @@ jobs:
       # ----------------------------
       - name: Restore Android Keystore
         run: |
-          echo base64 --decode > android/app/upload-keystore.jks
+            echo "${{ secrets.ANDROID_KEYSTORE }}" | base64 --decode > android/app/fireadbmote-keystore.jks
 
       - name: Create key.properties
         run: |
