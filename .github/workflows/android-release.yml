@@ -21,6 +21,9 @@ jobs:
       # ----------------------------
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0   # needed for git log/changelog/version bumps
 
       # ----------------------------
       # SETUP FLUTTER WITH CACHING
