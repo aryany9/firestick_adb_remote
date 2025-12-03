@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v3
 
       # ----------------------------
-      # SETUP FLUTTER
+      # SETUP FLUTTER WITH CACHING
       # ----------------------------
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -39,25 +39,36 @@ jobs:
         run: flutter pub get
 
       # ----------------------------
-      # VERSION BUMP (SAFE)
+      # RESTORE AND CREATE KEYPROPERTIES
+      # ----------------------------
+      - name: Restore Android Keystore
+        run: |
+          echo base64 --decode > android/app/upload-keystore.jks
+
+      - name: Create key.properties
+        run: |
+          cat <<EOF > android/key.properties
+          storeFile=upload-keystore.jks
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          EOF
+
+      # ----------------------------
+      # SAFE VERSION BUMP
       # ----------------------------
       - name: Increment version safely
         id: version_bump
         run: |
           current_version=$(grep '^version:' pubspec.yaml | awk '{print $2}')
-
           base_version=$(echo "$current_version" | cut -d+ -f1)
-
           build_number=$(echo "$current_version" | grep -o '\+[0-9]*' | tr -d '+')
           if [ -z "$build_number" ]; then
             build_number=0
           fi
-
           new_build_number=$((build_number + 1))
           new_version="$base_version+$new_build_number"
-
           sed -i "s/^version:.*/version: $new_version/" pubspec.yaml
-
           echo "new_version=$new_version" >> $GITHUB_ENV
           echo "VERSION: $new_version"
 
@@ -68,13 +79,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
           git add pubspec.yaml
           git commit -m "chore: bump version to ${{ env.new_version }}"
           git push
 
       # ----------------------------
-      # AUTO CHANGELOG GENERATION
+      # GENERATE CHANGELOG
       # ----------------------------
       - name: Generate Changelog
         id: changelog
@@ -86,7 +96,7 @@ jobs:
           echo "EOF" >> $GITHUB_ENV
 
       # ----------------------------
-      # CREATE RELEASE
+      # CREATE GITHUB RELEASE
       # ----------------------------
       - name: Create GitHub Release
         id: create_release
@@ -103,7 +113,7 @@ jobs:
           prerelease: false
 
       # ----------------------------
-      # BUILD ARTIFACTS
+      # BUILD RELEASE ARTIFACTS
       # ----------------------------
       - name: Build AAB
         run: flutter build appbundle --release
@@ -112,7 +122,7 @@ jobs:
         run: flutter build apk --release
 
       # ----------------------------
-      # UPLOAD ARTIFACTS
+      # UPLOAD RELEASE ARTIFACTS
       # ----------------------------
       - name: Upload AAB
         uses: actions/upload-release-asset@v1

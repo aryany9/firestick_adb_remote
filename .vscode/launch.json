@@ -5,18 +5,18 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "flutter_application_1",
+            "name": "firestick_adb_remote",
             "request": "launch",
             "type": "dart"
         },
         {
-            "name": "flutter_application_1 (profile mode)",
+            "name": "firestick_adb_remote (profile mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "profile"
         },
         {
-            "name": "flutter_application_1 (release mode)",
+            "name": "firestick_adb_remote (release mode)",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release"
