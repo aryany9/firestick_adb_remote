@@ -1,0 +1,130 @@
+name: Automated Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_title:
+        description: "Title for the release"
+        required: true
+      release_description:
+        description: "Description for the release"
+        required: true
+
+jobs:
+  release:
+    name: Build & Release Android App
+    runs-on: ubuntu-latest
+
+    steps:
+      # ----------------------------
+      # CHECKOUT REPO
+      # ----------------------------
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # ----------------------------
+      # SETUP FLUTTER
+      # ----------------------------
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.24.3"
+
+      # ----------------------------
+      # INSTALL DEPENDENCIES
+      # ----------------------------
+      - name: Install dependencies
+        run: flutter pub get
+
+      # ----------------------------
+      # VERSION BUMP (SAFE)
+      # ----------------------------
+      - name: Increment version safely
+        id: version_bump
+        run: |
+          current_version=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+
+          base_version=$(echo "$current_version" | cut -d+ -f1)
+
+          build_number=$(echo "$current_version" | grep -o '\+[0-9]*' | tr -d '+')
+          if [ -z "$build_number" ]; then
+            build_number=0
+          fi
+
+          new_build_number=$((build_number + 1))
+          new_version="$base_version+$new_build_number"
+
+          sed -i "s/^version:.*/version: $new_version/" pubspec.yaml
+
+          echo "new_version=$new_version" >> $GITHUB_ENV
+          echo "VERSION: $new_version"
+
+      # ----------------------------
+      # COMMIT VERSION CHANGE
+      # ----------------------------
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add pubspec.yaml
+          git commit -m "chore: bump version to ${{ env.new_version }}"
+          git push
+
+      # ----------------------------
+      # AUTO CHANGELOG GENERATION
+      # ----------------------------
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          echo "Generating changelog..."
+          CHANGELOG=$(git log -20 --pretty=format:"- %s (%h)" --no-merges)
+          echo "changelog<<EOF" >> $GITHUB_ENV
+          echo "$CHANGELOG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      # ----------------------------
+      # CREATE RELEASE
+      # ----------------------------
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: v${{ env.new_version }}
+          release_name: ${{ github.event.inputs.release_title }}
+          body: |
+            ${{ github.event.inputs.release_description }}
+
+            ## Changelog
+            ${{ env.changelog }}
+          draft: false
+          prerelease: false
+
+      # ----------------------------
+      # BUILD ARTIFACTS
+      # ----------------------------
+      - name: Build AAB
+        run: flutter build appbundle --release
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      # ----------------------------
+      # UPLOAD ARTIFACTS
+      # ----------------------------
+      - name: Upload AAB
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: build/app/outputs/bundle/release/app-release.aab
+          asset_name: app-release.aab
+          asset_content_type: application/octet-stream
+
+      - name: Upload APK
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: build/app/outputs/flutter-apk/app-release.apk
+          asset_name: app-release.apk
+          asset_content_type: application/octet-stream
