@@ -146,5 +146,5 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: build/app/outputs/flutter-apk/app-release.apk
-          asset_name: firestick-adb-remote-${{ env.new_version }}.aab
+          asset_name: firestick-adb-remote-${{ env.new_version }}.apk
           asset_content_type: application/octet-stream
