@@ -1,7 +1,8 @@
 // Example RemoteScreen showing how to use sleep/wake functionality
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:provider/provider.dart';
-import '../adb_manager.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import '../data/adb/adb_manager.dart';
 
 class RemoteScreen extends StatefulWidget {
   const RemoteScreen({Key? key}) : super(key: key);
@@ -10,7 +11,8 @@ class RemoteScreen extends StatefulWidget {
   State<RemoteScreen> createState() => _RemoteScreenState();
 }
 
-class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver {
+class _RemoteScreenState extends State<RemoteScreen>
+    with WidgetsBindingObserver {
   final _ipController = TextEditingController();
   final _portController = TextEditingController(text: '5555');
 
@@ -18,7 +20,7 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    
+
     // Initialize with saved IP if available
     final manager = context.read<AdbManager>();
     if (manager.ip != null) {
@@ -38,7 +40,7 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final manager = context.read<AdbManager>();
-    
+
     switch (state) {
       case AppLifecycleState.paused:
       case AppLifecycleState.inactive:
@@ -60,6 +62,61 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
     }
   }
 
+  Future<bool> _checkWifiConnection() async {
+    final result = await Connectivity().checkConnectivity();
+
+    debugPrint("Connectivity result: $result");
+
+    return result.contains(ConnectivityResult.wifi);
+  }
+
+  void _showWifiError(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please connect to a Wi-Fi network to use this app.'),
+      ),
+    );
+  }
+
+  Widget _buildLastConnectedIp(AdbManager manager) {
+    if (manager.ip == null || manager.ip!.isEmpty) {
+      return const SizedBox.shrink(); // Return an empty widget if no IP is saved
+    }
+
+    return GestureDetector(
+      onTap: () async {
+        if (!manager.connecting) {
+          final isWifiConnected = await _checkWifiConnection();
+          if (!isWifiConnected) {
+            _showWifiError(context);
+            return;
+          }
+          manager.connect(host: manager.ip, p: manager.port);
+        } else {
+          null;
+        }
+      },
+      child: Card(
+        color: Colors.blue[50],
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Icon(Icons.history, color: Colors.blue[700]),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Last connected: ${manager.ip}:${manager.port}',
+                  style: TextStyle(fontSize: 14, color: Colors.blue[900]),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -74,24 +131,28 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (!manager.isActive) ...[
+                  // Last connected IP
+                  _buildLastConnectedIp(manager),
+                  const SizedBox(height: 16),
+                ],
+
                 // Connection Status Card
                 _buildStatusCard(manager),
                 const SizedBox(height: 16),
-                
+
                 // Connection Controls (only show when not connected)
                 if (!manager.isActive) ...[
                   _buildConnectionForm(manager),
                   const SizedBox(height: 16),
                 ],
-                
+
                 // Connection Action Buttons
                 _buildConnectionButtons(manager),
                 const SizedBox(height: 24),
-                
+
                 // Remote Control (only when connected or sleeping)
-                if (manager.isActive) ...[
-                  _buildRemoteControls(manager),
-                ],
+                if (manager.isActive) ...[_buildRemoteControls(manager)],
               ],
             ),
           );
@@ -156,10 +217,7 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
                   const SizedBox(height: 4),
                   Text(
                     statusDetail,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey[600],
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                   ),
                 ],
               ),
@@ -207,7 +265,13 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
             child: ElevatedButton.icon(
               onPressed: manager.connecting
                   ? null
-                  : () {
+                  : () async {
+                      final isWifiConnected = await _checkWifiConnection();
+                      if (!isWifiConnected) {
+                        _showWifiError(context);
+                        return;
+                      }
+
                       final ip = _ipController.text.trim();
                       final port = int.tryParse(_portController.text) ?? 5555;
                       if (ip.isNotEmpty) {
@@ -223,7 +287,7 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
               ),
             ),
           ),
-        
+
         // Sleep Button (when connected)
         if (manager.connected) ...[
           Expanded(
@@ -240,7 +304,7 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
           ),
           const SizedBox(width: 8),
         ],
-        
+
         // Wake Button (when sleeping)
         if (manager.sleeping) ...[
           Expanded(
@@ -257,7 +321,7 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
           ),
           const SizedBox(width: 8),
         ],
-        
+
         // Disconnect Button (when connected or sleeping)
         if (manager.isActive)
           Expanded(
@@ -279,12 +343,12 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
   Widget _buildRemoteControls(AdbManager manager) {
     return Column(
       children: [
-        const Text(
-          'Remote Control',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 16),
-        
+        // const Text(
+        //   'Remote Control',
+        //   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        // ),
+        // const SizedBox(height: 16),
+
         // D-pad
         Column(
           children: [
@@ -319,9 +383,9 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
             ),
           ],
         ),
-        
+
         const SizedBox(height: 24),
-        
+
         // Navigation buttons
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -336,11 +400,16 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
               label: 'Home',
               onPressed: manager.home,
             ),
+            _buildRemoteButton(
+              icon: Icons.menu,
+              label: 'Menu',
+              onPressed: manager.menu,
+            ),
           ],
         ),
-        
+
         const SizedBox(height: 16),
-        
+
         // Volume controls
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -362,9 +431,9 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
             ),
           ],
         ),
-        
+
         const SizedBox(height: 24),
-        
+
         // Info card
         Card(
           color: Colors.blue[50],
@@ -377,10 +446,7 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
                 Expanded(
                   child: Text(
                     'Tip: Use "Sleep" instead of "Disconnect" to avoid re-authorization prompts',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.blue[900],
-                    ),
+                    style: TextStyle(fontSize: 12, color: Colors.blue[900]),
                   ),
                 ),
               ],
@@ -401,18 +467,16 @@ class _RemoteScreenState extends State<RemoteScreen> with WidgetsBindingObserver
       onPressed: () async {
         final success = await onPressed();
         if (!success && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Command failed')),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('Command failed')));
         }
       },
       style: ElevatedButton.styleFrom(
         backgroundColor: primary ? Colors.deepOrange : Colors.grey[300],
         foregroundColor: primary ? Colors.white : Colors.black87,
         padding: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,

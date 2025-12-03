@@ -1,20 +1,21 @@
 // main.dart
+import 'package:firestick_adb_remote/presentation/state/remote_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'adb_manager.dart';
-import './screens/splash_screen.dart';
-import './screens/remote_screen.dart';
+import 'data/adb/adb_manager.dart';
+import 'presentation/screens/splash_screen.dart';
+import 'presentation/screens/remote_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Set preferred orientations (optional - portrait only)
   SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  
+
   // Set system UI overlay style
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -24,10 +25,11 @@ void main() {
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
-  
+
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => RemoteController(AdbManager())),
         ChangeNotifierProvider(create: (_) => AdbManager()),
       ],
       child: const MyApp(),
@@ -67,9 +69,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const SplashScreen(
-        nextScreen: RemoteScreen(),
-      ),
+      home: const SplashScreen(nextScreen: RemoteScreen()),
     );
   }
 }
