@@ -76,43 +76,65 @@ class AdbKeyManager {
           throw Exception("Public key parse failed");
         }
 
-        // 2) Try parsing private key directly (works when basic_utils can handle the PEM)
+        // // 2) Try parsing private key directly (works when basic_utils can handle the PEM)
         RSAPrivateKey? privateKey;
-        var privateParsed = false;
-        debugPrint("Private: $privPem");
-        try {
-          privateKey = CryptoUtils.rsaPrivateKeyFromPem(privPem) as RSAPrivateKey;
-          privateParsed = true;
-          debugPrint("Parsed private key directly using basic_utils");
-        } catch (e) {
-          debugPrint("Direct private key parse failed: $e");
-        }
+        // var privateParsed = false;
+        // debugPrint("Private: $privPem");
+        // try {
+        //   privateKey = CryptoUtils.rsaPrivateKeyFromPem(privPem) as RSAPrivateKey;
+        //   privateParsed = true;
+        //   debugPrint("Parsed private key directly using basic_utils");
+        // } catch (e) {
+        //   debugPrint("Direct private key parse failed: $e");
+        // }
 
         // 3) If direct parse failed, attempt PKCS#1 -> PKCS#8 wrapping (manual DER assembly)
-        if (!privateParsed) {
+        // if (!privateParsed) {
           debugPrint("Attempting PKCS#1 -> PKCS#8 conversion for private key...");
           try {
             final pkcs8Pem = _convertPkcs1PemToPkcs8Pem(privPem);
             privateKey = CryptoUtils.rsaPrivateKeyFromPem(pkcs8Pem) as RSAPrivateKey;
-            privateParsed = true;
+            // privateParsed = true;
             debugPrint("Parsed private key after PKCS#8 conversion");
             // Replace privPem variable with pkcs8Pem so file write/verify uses stable format if desired.
           } catch (e) {
             debugPrint("PKCS#1 -> PKCS#8 conversion failed: $e");
           }
-        }
+        // }
 
-        if (!privateParsed || privateKey == null) {
-          throw Exception("Private key parsing failed after all attempts");
-        }
+        // if (!privateParsed || privateKey == null) {
+        //   throw Exception("Private key parsing failed after all attempts");
+        // }
 
         // 4) Build keypair and initialize AdbCrypto
-        _keyPair = pc.AsymmetricKeyPair<RSAPublicKey, RSAPrivateKey>(publicKey, privateKey);
+        _keyPair = pc.AsymmetricKeyPair<RSAPublicKey, RSAPrivateKey>(publicKey, privateKey!);
         _crypto = AdbCrypto(keyPair: _keyPair!);
+
+        _verifyPublicKeyFormat();
+
+        await _testSignature();
+        // After parsing public and private keys successfully
+        // Test that AdbCrypto can actually use this keypair
+        try {
+          final testCrypto = AdbCrypto(keyPair: _keyPair!);
+          final testToken = Uint8List.fromList([1, 2, 3, 4]);
+          final testSig = testCrypto.signAdbTokenPayload(testToken);
+          
+          if (testSig.isEmpty) {
+            debugPrint("❌ Signing test failed - regenerating keys");
+            throw Exception("Keypair signing failed");
+          }
+          
+          _crypto = testCrypto;
+          debugPrint("✅ Keypair signing test passed");
+        } catch (e) {
+          debugPrint("❌ Crypto initialization failed: $e");
+          throw e;
+        }
 
         _publicKeyPem = _normalizePemNewlines(pubPem);
         // compute fingerprint from the public key's ssh-rsa blob (consistent)
-        _keyFingerprint = computeSshRsaMd5FingerprintFromPem(_publicKeyPem!);
+        _keyFingerprint = computeAndroidAdbFingerprint(_publicKeyPem!);
 
         debugPrint("✅ RESTORED fingerprint: $_keyFingerprint");
         _cryptoReady = true;
@@ -129,6 +151,44 @@ class AdbKeyManager {
     await _generateNewKeypair();
     _cryptoReady = _crypto != null;
   }
+// In AdbKeyManager after crypto is initialized
+Future<void> _verifyPublicKeyFormat() async {
+  if (_crypto == null || _keyPair == null) return;
+  
+  final publicKeyBytes = _crypto!.getAdbPublicKeyPayload();
+  
+  // Use flutter_adb's conversion (should be identical to what's sent)
+  final androidKeyBytes = AdbCrypto.convertRsaPublicKeyToAdbFormat(_keyPair!.publicKey);
+  final base64Key = base64.encode(androidKeyBytes);
+  final expectedPayload = utf8.encode('$base64Key unknown@unknown\x00');
+  
+  debugPrint("Public key bytes length: ${publicKeyBytes.length}");
+  debugPrint("Expected bytes length: ${expectedPayload.length}");
+  debugPrint("Keys match: ${_compareBytes(publicKeyBytes, expectedPayload)}");
+}
+
+
+bool _compareBytes(Uint8List a, Uint8List b) {
+  if (a.length != b.length) return false;
+  for (int i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+  // In AdbKeyManager after restoring keys
+Future<void> _testSignature() async {
+  if (_keyPair == null || _crypto == null) return;
+  
+  // Test signing with a known token
+  final testToken = Uint8List.fromList([1, 2, 3, 4, 5, 6, 7, 8]);
+  final signature = _crypto!.signAdbTokenPayload(testToken);
+  
+  debugPrint("Test signature length: ${signature.length}");
+  debugPrint("Test signature: ${base64.encode(signature)}");
+  
+  // Verify with public key
+  // Add verification logic here if flutter_adb exposes it
+}
 
   Future<void> _generateNewKeypair() async {
     debugPrint("🔑 Generating NEW RSA keypair");
@@ -167,7 +227,7 @@ class AdbKeyManager {
 
         if (verifyPriv == privPem && verifyPub == pubPem) {
           _publicKeyPem = pubPem;
-          _keyFingerprint = computeSshRsaMd5FingerprintFromPem(pubPem);
+          _keyFingerprint = computeAndroidAdbFingerprint(pubPem);
           _keysAuthorized = false;
           await _storage.delete(key: keysAuthorizedKey);
           await _writePemsToFiles(privPem, pubPem);
@@ -203,7 +263,7 @@ class AdbKeyManager {
 
           _keysAuthorized = true;
           _publicKeyPem = normalizedPub;
-          _keyFingerprint ??= computeSshRsaMd5FingerprintFromPem(normalizedPub);
+          _keyFingerprint ??= computeAndroidAdbFingerprint(normalizedPub);
 
           debugPrint("💾 Keys re-saved post-connection: $_keyFingerprint");
         }
@@ -320,6 +380,109 @@ class AdbKeyManager {
 
     return builder.toBytes();
   }
+
+  String computeAndroidAdbFingerprint(String pubPem) {
+  try {
+    final pub = CryptoUtils.rsaPublicKeyFromPem(pubPem) as RSAPublicKey;
+    
+    // Build Android's custom RSA public key structure
+    final androidKeyBytes = AdbCrypto.convertRsaPublicKeyToAdbFormat(pub);
+    
+    // MD5 hash of the entire structure
+    final digest = md5.convert(androidKeyBytes);
+    return digest.bytes
+        .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
+        .join(':');
+  } catch (e, st) {
+    debugPrint("Android fingerprint error: $e\n$st");
+    return "";
+  }
+}
+
+// Uint8List _buildAndroidRsaPublicKey(RSAPublicKey pub) {
+//   final modulus = pub.modulus!;
+//   final exponent = pub.exponent!;
+  
+//   // Android uses 2048-bit keys = 256 bytes = 64 words
+//   const keySize = 2048;
+//   const keySizeBytes = keySize ~/ 8; // 256 bytes
+//   const keySizeWords = keySizeBytes ~/ 4; // 64 words
+  
+//   // Get modulus bytes (little-endian for Android)
+//   final modulusBytes = _bigIntToBytesLE(modulus, keySizeBytes);
+  
+//   // Calculate Montgomery parameters
+//   final n0inv = _calculateN0Inv(modulus);
+//   final rr = _calculateRR(modulus, keySizeBytes);
+  
+//   final builder = BytesBuilder();
+  
+//   // 1. modulus_size_words (4 bytes, little-endian)
+//   builder.add(_uint32ToLE(keySizeWords));
+  
+//   // 2. n0inv (4 bytes, little-endian)
+//   builder.add(_uint32ToLE(n0inv));
+  
+//   // 3. modulus (256 bytes, little-endian)
+//   builder.add(modulusBytes);
+  
+//   // 4. rr (256 bytes, little-endian)
+//   builder.add(rr);
+  
+//   // 5. exponent (4 bytes, little-endian)
+//   builder.add(_uint32ToLE(exponent.toInt()));
+  
+//   return builder.toBytes();
+// }
+
+// In AdbKeyManager, replace _buildAndroidRsaPublicKey with:
+Uint8List _buildAndroidRsaPublicKey(RSAPublicKey pub) {
+  // Use flutter_adb's implementation directly
+  return AdbCrypto.convertRsaPublicKeyToAdbFormat(pub);
+}
+
+// Convert BigInt to little-endian bytes with fixed length
+Uint8List _bigIntToBytesLE(BigInt n, int length) {
+  final bytes = Uint8List(length);
+  var temp = n;
+  for (int i = 0; i < length; i++) {
+    bytes[i] = (temp & BigInt.from(0xff)).toInt();
+    temp = temp >> 8;
+  }
+  return bytes;
+}
+
+// Convert uint32 to little-endian bytes
+Uint8List _uint32ToLE(int value) {
+  return Uint8List.fromList([
+    value & 0xff,
+    (value >> 8) & 0xff,
+    (value >> 16) & 0xff,
+    (value >> 24) & 0xff,
+  ]);
+}
+
+// Calculate n0inv: -1 / n[0] mod 2^32
+int _calculateN0Inv(BigInt modulus) {
+  final n0 = (modulus & BigInt.from(0xffffffff)).toInt();
+  // Extended Euclidean algorithm for modular inverse
+  int x = n0;
+  int y = 1;
+  for (int i = 0; i < 32; i++) {
+    y = (y * (2 - x * y)) & 0xffffffff;
+  }
+  return (-y) & 0xffffffff;
+}
+
+// Calculate R^2 mod N (Montgomery parameter)
+Uint8List _calculateRR(BigInt modulus, int length) {
+  // R = 2^(key_size_bits) = 2^2048
+  final r = BigInt.two.pow(length * 8);
+  // R^2 mod N
+  final rr = (r * r) % modulus;
+  return _bigIntToBytesLE(rr, length);
+}
+
 
   // ---------------------
   // PKCS#1 -> PKCS#8 conversion helper

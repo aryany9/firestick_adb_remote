@@ -22,6 +22,7 @@ class AdbConnectionHandler {
   StreamSubscription<bool>? _connSub;
   Timer? _keepAliveTimer;
   bool _connectBusy = false;
+  bool _disconnectBusy = false;
 
   String? ip;
   int port = defaultPort;
@@ -57,7 +58,7 @@ class AdbConnectionHandler {
       if (pubPem == null || pubPem.isEmpty) return null;
 
       // AdbKeyManager already provides TV-compatible fingerprint
-      final fingerprint = keyManager.computeSshRsaMd5FingerprintFromPem(pubPem);
+      final fingerprint = keyManager.computeAndroidAdbFingerprint(pubPem);
       return fingerprint;
     } catch (e, st) {
       debugPrint("❌ Fingerprint computation error: $e\n$st");
@@ -148,16 +149,51 @@ class AdbConnectionHandler {
     }
   }
 
-  Future<void> disconnect() async {
+Future<void> disconnect() async {
+  // Prevent duplicate calls
+  if (_disconnectBusy || connectionState == ConnectionState.disconnected) {
+    debugPrint("⚠️ Disconnect already in progress or disconnected");
+    return;
+  }
+  
+  _disconnectBusy = true;
+  
+  try {
+    debugPrint("Disconnecting from device");
+    LogService.instance.log("Disconnecting from device");
+    
     _stopKeepAlive();
     shellQueue.closeShell();
-    _connSub?.cancel();
+    
+    // CRITICAL: Cancel subscription FIRST to prevent recursive calls
+    await _connSub?.cancel();
     _connSub = null;
-    _connection?.disconnect();
-    _connection = null;
+    
+    // Set state BEFORE calling disconnect to prevent stream events
     connectionState = ConnectionState.disconnected;
-    onStateChanged();
+    
+    // Small delay to ensure subscription is fully cancelled
+    await Future.delayed(const Duration(milliseconds: 50));
+    
+    // Now safe to disconnect
+    try {
+      _connection?.disconnect();
+    } catch (e) {
+      debugPrint("Disconnect error (safe to ignore): $e");
+    }
+    
+    _connection = null;
+    
+    debugPrint("Disconnected from device");
+    LogService.instance.log("Disconnected from device");
+    
+    onStateChanged();  // Single state change notification
+  } finally {
+    _disconnectBusy = false;
   }
+}
+
+
 
   Future<void> sleep() async {
     if (connectionState != ConnectionState.connected) return;
@@ -177,23 +213,37 @@ class AdbConnectionHandler {
     onStateChanged();
   }
 
-  Future<void> _handleConnectionLoss() async {
-    if (connectionState == ConnectionState.disconnected) return;
-    final savedIp = ip;
-    final savedPort = port;
-    await _cleanupConnection();
-    if (savedIp != null) await connect(host: savedIp, p: savedPort);
+Future<void> _handleConnectionLoss() async {
+  if (connectionState == ConnectionState.disconnected || _disconnectBusy) {
+    return;  // Already handling disconnect
   }
+  
+  debugPrint("⚠️ Connection lost, attempting reconnect");
+  final savedIp = ip;
+  final savedPort = port;
+  await _cleanupConnection();
+  if (savedIp != null) await connect(host: savedIp, p: savedPort);
+}
 
-  Future<void> _cleanupConnection() async {
-    _connSub?.cancel();
-    _connSub = null;
-    shellQueue.closeShell();
+Future<void> _cleanupConnection() async {
+  await _connSub?.cancel();
+  _connSub = null;
+  
+  await Future.delayed(const Duration(milliseconds: 50));
+  
+  shellQueue.closeShell();
+  
+  try {
     _connection?.disconnect();
-    _connection = null;
-    connectionState = ConnectionState.disconnected;
-    onStateChanged();
+  } catch (e) {
+    debugPrint("Cleanup disconnect error (safe to ignore): $e");
   }
+  
+  _connection = null;
+  connectionState = ConnectionState.disconnected;
+  onStateChanged();
+}
+
 
   void _startKeepAlive() {
     _keepAliveTimer?.cancel();
