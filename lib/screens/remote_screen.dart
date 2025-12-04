@@ -1,4 +1,5 @@
 // Example RemoteScreen showing how to use sleep/wake functionality
+import 'package:firestick_adb_remote/data/adb/models/connection_state.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:provider/provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';

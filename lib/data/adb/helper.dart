@@ -57,3 +57,5 @@ String computeAdbFingerprintFromPem(String pubPem) {
       .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
       .join(':');
 }
+
+

@@ -1,0 +1,217 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
+import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_adb/adb_connection.dart';
+
+import 'package:firestick_adb_remote/data/adb/adb_key_manager.dart';
+import 'package:firestick_adb_remote/data/adb/adb_shell_queue.dart';
+import 'package:firestick_adb_remote/data/adb/constants.dart';
+import 'package:firestick_adb_remote/data/adb/models/connection_state.dart';
+import 'package:firestick_adb_remote/services/log_service.dart';
+
+class AdbConnectionHandler {
+  final FlutterSecureStorage _storage;
+  final AdbKeyManager keyManager;
+  final AdbShellQueue shellQueue;
+  final VoidCallback onStateChanged;
+
+  AdbConnection? _connection;
+  StreamSubscription<bool>? _connSub;
+  Timer? _keepAliveTimer;
+  bool _connectBusy = false;
+
+  String? ip;
+  int port = defaultPort;
+  ConnectionState connectionState = ConnectionState.disconnected;
+
+  AdbConnectionHandler({
+    required FlutterSecureStorage storage,
+    required this.keyManager,
+    required this.shellQueue,
+    required this.onStateChanged,
+  }) : _storage = storage;
+
+  bool get connected => connectionState.isConnected;
+  bool get connecting => connectionState.isConnecting;
+  bool get sleeping => connectionState.isSleeping;
+  bool get isActive => connectionState.isActive;
+
+  Future<void> initialize() async {
+    final lastIp = await _storage.read(key: lastIpKey);
+    final lastPort = await _storage.read(key: lastPortKey);
+    if (lastIp != null) {
+      ip = lastIp;
+      port = lastPort != null ? int.tryParse(lastPort) ?? defaultPort : defaultPort;
+    }
+  }
+
+  /// Compute the actual MD5 fingerprint that Android TV will display
+  /// Uses the public PEM stored in keyManager (OpenSSH 'ssh-rsa' blob MD5)
+  String? _computeActualAdbFingerprint() {
+    try {
+      // Get the stored public key PEM (synchronous cached copy)
+      final pubPem = keyManager.getPublicKeyPem();
+      if (pubPem == null || pubPem.isEmpty) return null;
+
+      // AdbKeyManager already provides TV-compatible fingerprint
+      final fingerprint = keyManager.computeSshRsaMd5FingerprintFromPem(pubPem);
+      return fingerprint;
+    } catch (e, st) {
+      debugPrint("❌ Fingerprint computation error: $e\n$st");
+      return null;
+    }
+  }
+
+  Future<void> connect({String? host, int? p}) async {
+    debugPrint("🔌 Connect to $host:$p | CryptoReady: ${keyManager.cryptoReady}");
+    await LogService.instance.log("🔌 Connect: $host:$p");
+
+    if (!keyManager.cryptoReady) {
+      await Future.doWhile(() async {
+        await Future.delayed(const Duration(milliseconds: 50));
+        return !keyManager.cryptoReady;
+      });
+    }
+
+    if (connecting) return;
+
+    final effectiveHost = host ?? ip;
+    final effectivePort = p ?? port;
+    if (effectiveHost == null || effectiveHost.isEmpty) return;
+
+    if (_connectBusy) return;
+    _connectBusy = true;
+
+    try {
+      connectionState = ConnectionState.connecting;
+      onStateChanged();
+
+      if (keyManager.crypto == null) {
+        debugPrint("No crypto available; aborting connect");
+        connectionState = ConnectionState.disconnected;
+        onStateChanged();
+        return;
+      }
+
+      // Log the ACTUAL fingerprint that will be shown on TV (compute from stored PEM)
+      final actualFingerprint = _computeActualAdbFingerprint();
+      if (actualFingerprint != null) {
+        debugPrint("🔑 ACTUAL TV FINGERPRINT (MD5): $actualFingerprint");
+        await LogService.instance.log("🔑 TV will show fingerprint: $actualFingerprint");
+      } else {
+        debugPrint("⚠️ Could not compute TV fingerprint");
+      }
+
+      _connection = AdbConnection(effectiveHost, effectivePort, keyManager.crypto!);
+
+      _connSub?.cancel();
+      try {
+        _connSub = _connection!.onConnectionChanged.listen((state) {
+          if (!state && connectionState != ConnectionState.disconnected) {
+            _handleConnectionLoss();
+          }
+          onStateChanged();
+        });
+      } catch (_) {}
+
+      final ok = await _connection!.connect();
+      if (!ok) {
+        debugPrint("❌ Connection failed");
+        connectionState = ConnectionState.disconnected;
+        await _cleanupConnection();
+        return;
+      }
+
+      await shellQueue.openShell(_connection!);
+      connectionState = ConnectionState.connected;
+
+      // Mark keys authorized AFTER successful connection/handshake
+      await keyManager.markKeysAuthorized();
+
+      await _storage.write(key: lastIpKey, value: effectiveHost);
+      await _storage.write(key: lastPortKey, value: effectivePort.toString());
+
+      ip = effectiveHost;
+      port = effectivePort;
+      debugPrint("✅ Connected: $effectiveHost:$effectivePort");
+      await LogService.instance.log("✅ Connected: $effectiveHost:$effectivePort");
+      onStateChanged();
+    } catch (e, st) {
+      debugPrint("Connect error: $e\n$st");
+      await _cleanupConnection();
+    } finally {
+      _connectBusy = false;
+      onStateChanged();
+    }
+  }
+
+  Future<void> disconnect() async {
+    _stopKeepAlive();
+    shellQueue.closeShell();
+    _connSub?.cancel();
+    _connSub = null;
+    _connection?.disconnect();
+    _connection = null;
+    connectionState = ConnectionState.disconnected;
+    onStateChanged();
+  }
+
+  Future<void> sleep() async {
+    if (connectionState != ConnectionState.connected) return;
+    connectionState = ConnectionState.sleeping;
+    _startKeepAlive();
+    onStateChanged();
+  }
+
+  Future<void> wake() async {
+    if (connectionState != ConnectionState.sleeping) return;
+    if (_connection == null || !shellQueue.hasShell) {
+      await connect();
+      return;
+    }
+    _stopKeepAlive();
+    connectionState = ConnectionState.connected;
+    onStateChanged();
+  }
+
+  Future<void> _handleConnectionLoss() async {
+    if (connectionState == ConnectionState.disconnected) return;
+    final savedIp = ip;
+    final savedPort = port;
+    await _cleanupConnection();
+    if (savedIp != null) await connect(host: savedIp, p: savedPort);
+  }
+
+  Future<void> _cleanupConnection() async {
+    _connSub?.cancel();
+    _connSub = null;
+    shellQueue.closeShell();
+    _connection?.disconnect();
+    _connection = null;
+    connectionState = ConnectionState.disconnected;
+    onStateChanged();
+  }
+
+  void _startKeepAlive() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+      if (connectionState == ConnectionState.sleeping && _connection != null) {
+        try {
+          await shellQueue.sendKeepAlive();
+        } catch (_) {
+          await _handleConnectionLoss();
+        }
+      }
+    });
+  }
+
+  void _stopKeepAlive() {
+    _keepAliveTimer?.cancel();
+    _keepAliveTimer = null;
+  }
+
+  AdbConnection? get connection => _connection;
+}

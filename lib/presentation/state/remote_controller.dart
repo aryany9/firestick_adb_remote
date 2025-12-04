@@ -1,10 +1,11 @@
+
+import 'package:firestick_adb_remote/data/adb/adb_manager.dart';
+import 'package:firestick_adb_remote/data/adb/models/connection_state.dart';
 import 'package:firestick_adb_remote/services/log_service.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
-import '../../../../data/adb/adb_manager.dart';
 
 class RemoteController extends ChangeNotifier {
   final AdbManager adb;
