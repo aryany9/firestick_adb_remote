@@ -2,6 +2,9 @@
 
 Firestick ADB Remote is a Flutter application that allows you to control your Firestick device over Wi-Fi using ADB (Android Debug Bridge). This app provides a user-friendly interface to interact with your Firestick device without needing a physical remote.
 
+## Screenshots
+   ![Home screen](assets/cover.png)
+   
 ## Features
 
 - **Connect via ADB over Wi-Fi**: Easily connect to your Firestick device using its IP address and port.
@@ -28,6 +31,7 @@ Firestick ADB Remote is a Flutter application that allows you to control your Fi
 2. Enter your Firestick's IP address and port (default port is usually `5555`).
 3. Once connected, you can use the app as a normal Firestick remote.
 4. Use the volume control feature to adjust the volume, especially if you are using a Bluetooth speaker connected directly to your Firestick.
+
 
 ### Installation
 
