@@ -25,54 +25,77 @@ class RemoteScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final padding = context.responsivePadding;
-          final maxWidth = context.isDesktop ? 600.0 : 450.0;
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final padding = context.responsivePadding;
+            final maxWidth = context.isDesktop ? 600.0 : 450.0;
 
-          return Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: maxWidth),
-              child: Padding(
-                padding: padding,
-                child: Column(
-                  children: [
-                    ConnectionSection(controller: controller),
-                    SizedBox(height: context.responsiveSpacing * 3),
-                    // Remote Controls: show only when active/connected
-                    if (controller.isActive)
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: RemoteControls(controller: controller),
-                        ),
-                      )
-                    else
-                      Expanded(
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text(
-                                'Not connected. Connect to a device to use remote controls.',
-                                textAlign: TextAlign.center,
-                              ),
-                              SizedBox(height: context.responsiveSpacing * 1.5),
-                              ElevatedButton(
-                                onPressed: () =>
-                                    Navigator.pushNamed(context, "/settings"),
-                                child: const Text('Open Settings'),
-                              ),
-                            ],
+            return Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: Padding(
+                  padding: padding,
+                  child: Column(
+                    children: [
+                      ConnectionSection(controller: controller),
+                      SizedBox(height: context.responsiveSpacing * 2),
+                      // Remote Controls: show only when active/connected
+                      if (controller.isActive)
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: RemoteControls(controller: controller),
+                          ),
+                        )
+                      else
+                        Expanded(
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text(
+                                  'Not connected. Connect to a device to use remote controls.',
+                                  textAlign: TextAlign.center,
+                                ),
+                                SizedBox(
+                                  height: context.responsiveSpacing * 1.5,
+                                ),
+                                ElevatedButton(
+                                  onPressed: () =>
+                                      Navigator.pushNamed(context, "/settings"),
+                                  child: const Text('Open Settings'),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
+      bottomNavigationBar: controller.isActive
+          ? SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: context.responsivePadding.left,
+                  vertical: context.responsiveSpacing,
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.tonalIcon(
+                    onPressed: controller.disconnect,
+                    icon: const Icon(Icons.power_off),
+                    label: const Text('Disconnect'),
+                  ),
+                ),
+              ),
+            )
+          : null,
     );
   }
 }

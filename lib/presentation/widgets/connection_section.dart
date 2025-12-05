@@ -12,8 +12,7 @@ class ConnectionSection extends StatelessWidget {
 
     return Column(
       children: [
-        // if (!controller.isActive)
-        _buildLastConnectedCard(context),
+        if (!controller.isActive) _buildLastConnectedCard(context),
         SizedBox(height: spacing),
 
         Card(
@@ -28,7 +27,6 @@ class ConnectionSection extends StatelessWidget {
                 _statusTile(context),
                 SizedBox(height: spacing * 1.5),
                 if (!controller.isActive) _buildConnectForm(context),
-                if (controller.isActive) _buildActiveButtons(context),
               ],
             ),
           ),
@@ -152,31 +150,6 @@ class ConnectionSection extends StatelessWidget {
             },
             icon: const Icon(Icons.power),
             label: const Text('Connect'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────────
-  // ACTIVE BUTTONS
-  // ─────────────────────────────────────────────────────────────────────────────
-  Widget _buildActiveButtons(BuildContext context) {
-    return Row(
-      children: [
-        // Expanded(
-        //   child: FilledButton.tonalIcon(
-        //     onPressed: controller.sleep,
-        //     icon: const Icon(Icons.bedtime),
-        //     label: const Text('Sleep'),
-        //   ),
-        // ),
-        // SizedBox(width: spacing),
-        Expanded(
-          child: FilledButton.tonalIcon(
-            onPressed: controller.disconnect,
-            icon: const Icon(Icons.power_off),
-            label: const Text('Disconnect'),
           ),
         ),
       ],
