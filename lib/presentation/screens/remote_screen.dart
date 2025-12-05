@@ -15,7 +15,7 @@ class RemoteScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         centerTitle: false,
-        title: const Text('Fire TV Remote'),
+        title: const Text('ADB Remote'),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
