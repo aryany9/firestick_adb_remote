@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firestick_adb_remote/theme/responsive.dart';
 import '../state/remote_controller.dart';
 
 class ConnectionSection extends StatelessWidget {
@@ -7,11 +8,13 @@ class ConnectionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final spacing = context.responsiveSpacing;
+
     return Column(
       children: [
         // if (!controller.isActive)
         _buildLastConnectedCard(context),
-        const SizedBox(height: 12),
+        SizedBox(height: spacing),
 
         Card(
           elevation: 1,
@@ -19,11 +22,11 @@ class ConnectionSection extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(spacing),
             child: Column(
               children: [
-                _statusTile(),
-                const SizedBox(height: 16),
+                _statusTile(context),
+                SizedBox(height: spacing * 1.5),
                 if (!controller.isActive) _buildConnectForm(context),
                 if (controller.isActive) _buildActiveButtons(context),
               ],
@@ -42,6 +45,9 @@ class ConnectionSection extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final cs = Theme.of(context).colorScheme;
+    final spacing = context.responsiveSpacing;
+
     return GestureDetector(
       onTap: () async {
         final wifiOk = await controller.checkWifi();
@@ -55,21 +61,21 @@ class ConnectionSection extends StatelessWidget {
         );
       },
       child: Card(
-        color: Colors.orange.shade50,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        color: cs.primaryContainer,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(spacing),
           child: Row(
             children: [
-              Icon(Icons.history, color: Colors.orange.shade700),
-              const SizedBox(width: 12),
+              Icon(Icons.history, color: cs.primary),
+              SizedBox(width: spacing),
               Expanded(
                 child: Text(
                   'Last connected: ${controller.lastIp}:${controller.lastPort}',
-                  style: TextStyle(fontSize: 14, color: Colors.orange.shade800),
+                  style: TextStyle(fontSize: 14, color: cs.onPrimaryContainer),
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.black45),
+              Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
             ],
           ),
         ),
@@ -80,13 +86,14 @@ class ConnectionSection extends StatelessWidget {
   // ─────────────────────────────────────────────────────────────────────────────
   // STATUS TILE
   // ─────────────────────────────────────────────────────────────────────────────
-  Widget _statusTile() {
+  Widget _statusTile(BuildContext context) {
     final color = controller.statusColor;
+    final spacing = context.responsiveSpacing;
 
     return Row(
       children: [
         Icon(controller.statusIcon, color: color, size: 32),
-        const SizedBox(width: 12),
+        SizedBox(width: spacing),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -100,7 +107,7 @@ class ConnectionSection extends StatelessWidget {
             ),
             Text(
               controller.statusDetail,
-              style: const TextStyle(color: Colors.black54),
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ],
         ),
@@ -112,6 +119,8 @@ class ConnectionSection extends StatelessWidget {
   // CONNECT FORM WITH WIFI CHECK
   // ─────────────────────────────────────────────────────────────────────────────
   Widget _buildConnectForm(BuildContext context) {
+    final spacing = context.responsiveSpacing;
+
     return Column(
       children: [
         TextField(
@@ -121,7 +130,7 @@ class ConnectionSection extends StatelessWidget {
             border: OutlineInputBorder(),
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: spacing),
         TextField(
           controller: controller.portController,
           decoration: const InputDecoration(
@@ -129,7 +138,7 @@ class ConnectionSection extends StatelessWidget {
             border: OutlineInputBorder(),
           ),
         ),
-        const SizedBox(height: 16),
+        SizedBox(height: spacing * 1.5),
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
@@ -155,14 +164,14 @@ class ConnectionSection extends StatelessWidget {
   Widget _buildActiveButtons(BuildContext context) {
     return Row(
       children: [
-        Expanded(
-          child: FilledButton.tonalIcon(
-            onPressed: controller.sleep,
-            icon: const Icon(Icons.bedtime),
-            label: const Text('Sleep'),
-          ),
-        ),
-        const SizedBox(width: 8),
+        // Expanded(
+        //   child: FilledButton.tonalIcon(
+        //     onPressed: controller.sleep,
+        //     icon: const Icon(Icons.bedtime),
+        //     label: const Text('Sleep'),
+        //   ),
+        // ),
+        // SizedBox(width: spacing),
         Expanded(
           child: FilledButton.tonalIcon(
             onPressed: controller.disconnect,

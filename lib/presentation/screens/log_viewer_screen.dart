@@ -1,4 +1,5 @@
 import 'package:firestick_adb_remote/services/log_service.dart';
+import 'package:firestick_adb_remote/theme/responsive.dart';
 import 'package:flutter/material.dart';
 
 class LogViewerScreen extends StatefulWidget {
@@ -29,6 +30,9 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final padding = context.responsivePadding;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Application Logs"),
@@ -45,16 +49,24 @@ class _LogViewerScreenState extends State<LogViewerScreen> {
       body: Column(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: padding,
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: cs.outline.withOpacity(0.2)),
+              ),
+            ),
             child: Text(
               "Log file size: ${(sizeBytes / 1024).toStringAsFixed(2)} KB",
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: Theme.of(context).textTheme.titleMedium,
             ),
           ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(12),
-              child: Text(logs.isEmpty ? "No logs yet" : logs),
+              padding: padding,
+              child: Text(
+                logs.isEmpty ? "No logs yet" : logs,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
             ),
           ),
         ],

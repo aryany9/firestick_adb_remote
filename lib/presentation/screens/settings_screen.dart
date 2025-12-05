@@ -1,4 +1,5 @@
 import 'package:firestick_adb_remote/services/log_service.dart';
+import 'package:firestick_adb_remote/theme/responsive.dart';
 import 'package:flutter/material.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -13,14 +14,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(title: const Text("Settings")),
       body: ListView(
+        padding: context.responsivePadding,
         children: [
           SwitchListTile(
             title: const Text("Enable Developer Mode"),
             subtitle: const Text("Enable internal logging & diagnostics"),
             value: devMode,
+            activeColor: cs.primary,
             onChanged: (value) {
               setState(() {
                 devMode = value;
@@ -28,7 +33,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               });
             },
           ),
-
           if (devMode)
             ListTile(
               title: const Text("View Logs"),

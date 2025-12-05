@@ -1,14 +1,14 @@
 import 'dart:async';
-
-import 'package:flutter/material.dart' hide ConnectionState;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter_adb/adb_connection.dart';
+import 'dart:math';
 
 import 'package:firestick_adb_remote/data/adb/adb_key_manager.dart';
 import 'package:firestick_adb_remote/data/adb/adb_shell_queue.dart';
 import 'package:firestick_adb_remote/data/adb/constants.dart';
 import 'package:firestick_adb_remote/data/adb/models/connection_state.dart';
 import 'package:firestick_adb_remote/services/log_service.dart';
+import 'package:flutter/material.dart' hide ConnectionState;
+import 'package:flutter_adb/adb_connection.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AdbConnectionHandler {
   final FlutterSecureStorage _storage;
@@ -47,15 +47,10 @@ class AdbConnectionHandler {
     }
   }
 
-  /// Compute the actual MD5 fingerprint that Android TV will display
-  /// Uses the public PEM stored in keyManager (OpenSSH 'ssh-rsa' blob MD5)
   String? _computeActualAdbFingerprint() {
     try {
-      // Get the stored public key PEM (synchronous cached copy)
       final pubPem = keyManager.getPublicKeyPem();
       if (pubPem == null || pubPem.isEmpty) return null;
-
-      // AdbKeyManager already provides TV-compatible fingerprint
       final fingerprint = keyManager.computeAndroidAdbFingerprint(pubPem);
       return fingerprint;
     } catch (e, st) {
@@ -95,15 +90,57 @@ class AdbConnectionHandler {
         return;
       }
 
-      // Log the ACTUAL fingerprint that will be shown on TV (compute from stored PEM)
+      // ✅ KEY FIX: Reuse existing connection if available and for same host/port
+      if (_connection != null) {
+        // Check if we can reuse the existing connection
+        final sameHost = _connection!.ip == effectiveHost;
+        final samePort = _connection!.port == effectivePort;
+        
+        if (sameHost && samePort) {
+          debugPrint('🔁 Reusing existing AdbConnection instance (session maintained)');
+          
+          // Try to reconnect with existing instance
+          try {
+            final ok = await _connection!.connect();
+            if (ok) {
+              await shellQueue.openShell(_connection!);
+              connectionState = ConnectionState.connected;
+              
+              await _storage.write(key: lastIpKey, value: effectiveHost);
+              await _storage.write(key: lastPortKey, value: effectivePort.toString());
+              
+              ip = effectiveHost;
+              port = effectivePort;
+              debugPrint("✅ Reconnected using existing session: $effectiveHost:$effectivePort");
+              await LogService.instance.log("✅ Reconnected (no auth required): $effectiveHost:$effectivePort");
+              onStateChanged();
+              return;
+            } else {
+              debugPrint("⚠️ Reconnect failed with existing instance, creating new");
+            }
+          } catch (e) {
+            debugPrint("⚠️ Error reusing connection: $e");
+          }
+        }
+      }
+
+      // Diagnostic logging
+      final payload = keyManager.getAdbPublicKeyBase64Payload();
+      if (payload != null) {
+        debugPrint('🔎 ADB PublicKey payload (len=${payload.length}): ${payload.substring(0, min(64, payload.length))}...');
+        await LogService.instance.log('ADB PublicKey payload (base64...): ${payload.substring(0, 64)}...');
+        await _storage.write(key: 'last_pub_payload', value: payload);
+      }
+
       final actualFingerprint = _computeActualAdbFingerprint();
       if (actualFingerprint != null) {
         debugPrint("🔑 ACTUAL TV FINGERPRINT (MD5): $actualFingerprint");
         await LogService.instance.log("🔑 TV will show fingerprint: $actualFingerprint");
-      } else {
-        debugPrint("⚠️ Could not compute TV fingerprint");
       }
 
+      // ✅ Only create new connection if we don't have one or host/port changed
+      debugPrint('🔄 Creating new AdbConnection for $effectiveHost:$effectivePort');
+      // Don't disconnect old one - just replace reference
       _connection = AdbConnection(effectiveHost, effectivePort, keyManager.crypto!);
 
       _connSub?.cancel();
@@ -120,14 +157,13 @@ class AdbConnectionHandler {
       if (!ok) {
         debugPrint("❌ Connection failed");
         connectionState = ConnectionState.disconnected;
-        await _cleanupConnection();
+        await _cleanupConnection(fullDisconnect: true);
         return;
       }
 
       await shellQueue.openShell(_connection!);
       connectionState = ConnectionState.connected;
 
-      // Mark keys authorized AFTER successful connection/handshake
       await keyManager.markKeysAuthorized();
 
       await _storage.write(key: lastIpKey, value: effectiveHost);
@@ -140,65 +176,63 @@ class AdbConnectionHandler {
       onStateChanged();
     } catch (e, st) {
       debugPrint("Connect error: $e\n$st");
-      await _cleanupConnection();
+      await _cleanupConnection(fullDisconnect: true);
     } finally {
       _connectBusy = false;
       onStateChanged();
     }
   }
 
-Future<void> disconnect() async {
-  // Prevent duplicate calls
-  if (_disconnectBusy || connectionState == ConnectionState.disconnected) {
-    debugPrint("⚠️ Disconnect already in progress or disconnected");
-    return;
-  }
-  
-  _disconnectBusy = true;
-  
-  try {
-    debugPrint("Disconnecting from device");
-    LogService.instance.log("Disconnecting from device");
-    
-    _stopKeepAlive();
-    shellQueue.closeShell();
-    
-    // CRITICAL: Cancel subscription FIRST to prevent recursive calls
-    await _connSub?.cancel();
-    _connSub = null;
-    
-    // Set state BEFORE calling disconnect to prevent stream events
-    connectionState = ConnectionState.disconnected;
-    
-    // Small delay to ensure subscription is fully cancelled
-    await Future.delayed(const Duration(milliseconds: 50));
-    
-    // Now safe to disconnect
-    try {
-      _connection?.disconnect();
-    } catch (e) {
-      debugPrint("Disconnect error (safe to ignore): $e");
+  // ✅ NEW: Add parameter to control whether to fully disconnect
+  Future<void> disconnect({bool keepSession = false}) async {
+    if (_disconnectBusy || connectionState == ConnectionState.disconnected) {
+      debugPrint("⚠️ Disconnect already in progress or disconnected");
+      return;
     }
     
-    _connection = null;
+    _disconnectBusy = true;
     
-    debugPrint("Disconnected from device");
-    LogService.instance.log("Disconnected from device");
-    
-    onStateChanged();  // Single state change notification
-  } finally {
-    _disconnectBusy = false;
+    try {
+      debugPrint("Disconnecting from device (keepSession: $keepSession)");
+      LogService.instance.log("Disconnecting from device");
+      
+      _stopKeepAlive();
+      shellQueue.closeShell();
+      
+      await _connSub?.cancel();
+      _connSub = null;
+      
+      connectionState = ConnectionState.disconnected;
+      
+      await Future.delayed(const Duration(milliseconds: 50));
+      
+      // ✅ Only actually disconnect if not keeping session
+      if (!keepSession) {
+        try {
+          _connection?.disconnect();
+        } catch (e) {
+          debugPrint("Disconnect error (safe to ignore): $e");
+        }
+        _connection = null;
+      } else {
+        debugPrint("🔒 Keeping AdbConnection instance alive for session reuse");
+      }
+      
+      debugPrint("Disconnected from device");
+      LogService.instance.log("Disconnected from device");
+      
+      onStateChanged();
+    } finally {
+      _disconnectBusy = false;
+    }
   }
-}
 
-
-
-  Future<void> sleep() async {
-    if (connectionState != ConnectionState.connected) return;
-    connectionState = ConnectionState.sleeping;
-    _startKeepAlive();
-    onStateChanged();
-  }
+  // Future<void> sleep() async {
+  //   if (connectionState != ConnectionState.connected) return;
+  //   connectionState = ConnectionState.sleeping;
+  //   _startKeepAlive();
+  //   onStateChanged();
+  // }
 
   Future<void> wake() async {
     if (connectionState != ConnectionState.sleeping) return;
@@ -211,50 +245,53 @@ Future<void> disconnect() async {
     onStateChanged();
   }
 
-Future<void> _handleConnectionLoss() async {
-  if (connectionState == ConnectionState.disconnected || _disconnectBusy) {
-    return;  // Already handling disconnect
+  Future<void> _handleConnectionLoss() async {
+    if (connectionState == ConnectionState.disconnected || _disconnectBusy) {
+      return;
+    }
+    
+    debugPrint("⚠️ Connection lost, attempting reconnect");
+    final savedIp = ip;
+    final savedPort = port;
+    // ✅ Don't fully disconnect - keep session
+    await _cleanupConnection(fullDisconnect: false);
+    if (savedIp != null) await connect(host: savedIp, p: savedPort);
   }
-  
-  debugPrint("⚠️ Connection lost, attempting reconnect");
-  final savedIp = ip;
-  final savedPort = port;
-  await _cleanupConnection();
-  if (savedIp != null) await connect(host: savedIp, p: savedPort);
-}
 
-Future<void> _cleanupConnection() async {
-  await _connSub?.cancel();
-  _connSub = null;
-  
-  await Future.delayed(const Duration(milliseconds: 50));
-  
-  shellQueue.closeShell();
-  
-  try {
-    _connection?.disconnect();
-  } catch (e) {
-    debugPrint("Cleanup disconnect error (safe to ignore): $e");
-  }
-  
-  _connection = null;
-  connectionState = ConnectionState.disconnected;
-  onStateChanged();
-}
-
-
-  void _startKeepAlive() {
-    _keepAliveTimer?.cancel();
-    _keepAliveTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
-      if (connectionState == ConnectionState.sleeping && _connection != null) {
-        try {
-          await shellQueue.sendKeepAlive();
-        } catch (_) {
-          await _handleConnectionLoss();
-        }
+  // ✅ Modified to optionally keep connection instance
+  Future<void> _cleanupConnection({bool fullDisconnect = false}) async {
+    await _connSub?.cancel();
+    _connSub = null;
+    
+    await Future.delayed(const Duration(milliseconds: 50));
+    
+    shellQueue.closeShell();
+    
+    if (fullDisconnect) {
+      try {
+        _connection?.disconnect();
+      } catch (e) {
+        debugPrint("Cleanup disconnect error (safe to ignore): $e");
       }
-    });
+      _connection = null;
+    }
+    
+    connectionState = ConnectionState.disconnected;
+    onStateChanged();
   }
+
+  // void _startKeepAlive() {
+  //   _keepAliveTimer?.cancel();
+  //   _keepAliveTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+  //     if (connectionState == ConnectionState.sleeping && _connection != null) {
+  //       try {
+  //         await shellQueue.sendKeepAlive();
+  //       } catch (_) {
+  //         await _handleConnectionLoss();
+  //       }
+  //     }
+  //   });
+  // }
 
   void _stopKeepAlive() {
     _keepAliveTimer?.cancel();

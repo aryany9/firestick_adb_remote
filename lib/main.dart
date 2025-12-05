@@ -3,6 +3,7 @@ import 'package:firestick_adb_remote/presentation/screens/log_viewer_screen.dart
 import 'package:firestick_adb_remote/presentation/screens/settings_screen.dart';
 import 'package:firestick_adb_remote/presentation/state/remote_controller.dart';
 import 'package:firestick_adb_remote/services/log_service.dart';
+import 'package:firestick_adb_remote/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -24,7 +25,7 @@ Future<void> main() async {
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Colors.black,
+      systemNavigationBarColor: Color(0xFF1F4788),
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
@@ -52,30 +53,7 @@ class MyApp extends StatelessWidget {
         "/logs": (_) => const LogViewerScreen(),
       },
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primarySwatch: Colors.deepOrange,
-        scaffoldBackgroundColor: Colors.grey[50],
-        appBarTheme: const AppBarTheme(
-          centerTitle: true,
-          elevation: 0,
-          backgroundColor: Colors.deepOrange,
-          foregroundColor: Colors.white,
-        ),
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        cardTheme: CardThemeData(
-          elevation: 2,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-      ),
+      theme: AppTheme.lightTheme(),
       home: const SplashScreen(nextScreen: RemoteScreen()),
     );
   }

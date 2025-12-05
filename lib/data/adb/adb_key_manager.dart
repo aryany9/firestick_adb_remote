@@ -547,4 +547,17 @@ Uint8List _calculateRR(BigInt modulus, int length) {
 
     return '-----BEGIN PRIVATE KEY-----\n$chunked-----END PRIVATE KEY-----\n';
   }
+
+  String? getAdbPublicKeyBase64Payload() {
+    if (_crypto == null || _keyPair == null) return null;
+    try {
+      final androidKeyBytes = AdbCrypto.convertRsaPublicKeyToAdbFormat(_keyPair!.publicKey);
+      final base64Key = base64.encode(androidKeyBytes);
+      final payload = '$base64Key unknown@unknown\x00';
+      return payload;
+    } catch (e) {
+      debugPrint('getAdbPublicKeyBase64Payload error: $e');
+      return null;
+    }
+  }
 }

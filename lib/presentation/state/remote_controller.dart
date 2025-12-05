@@ -126,19 +126,19 @@ class RemoteController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void sleep() {
-    try {
-      debugPrint("Putting device to sleep");
-      LogService.instance.log("Putting device to sleep");
-      adb.sleep();
-      debugPrint("Device is now in sleep mode");
-      LogService.instance.log("Device is now in sleep mode");
-    } catch (e) {
-      debugPrint("Sleep error: $e");
-      LogService.instance.log("Sleep error: $e");
-    }
-    notifyListeners();
-  }
+  // void sleep() {
+  //   try {
+  //     debugPrint("Putting device to sleep");
+  //     LogService.instance.log("Putting device to sleep");
+  //     adb.sleep();
+  //     debugPrint("Device is now in sleep mode");
+  //     LogService.instance.log("Device is now in sleep mode");
+  //   } catch (e) {
+  //     debugPrint("Sleep error: $e");
+  //     LogService.instance.log("Sleep error: $e");
+  //   }
+  //   notifyListeners();
+  // }
 
   // Remote actions
   Future<void> up() async {
@@ -288,14 +288,14 @@ class RemoteController extends ChangeNotifier {
   Color get statusColor => {
     ConnectionState.connected: Colors.green,
     ConnectionState.connecting: Colors.orange,
-    ConnectionState.sleeping: Colors.blue,
+    // ConnectionState.sleeping: Colors.blue,
     ConnectionState.disconnected: Colors.grey,
   }[adb.connectionState]!;
 
   IconData get statusIcon => {
     ConnectionState.connected: Icons.check_circle,
     ConnectionState.connecting: Icons.sync,
-    ConnectionState.sleeping: Icons.bedtime,
+    // ConnectionState.sleeping: Icons.bedtime,
     ConnectionState.disconnected: Icons.cancel,
   }[adb.connectionState]!;
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:provider/provider.dart';
+import 'package:firestick_adb_remote/theme/responsive.dart';
 import '../state/remote_controller.dart';
 import '../widgets/connection_section.dart';
 import '../widgets/remote_controls.dart';
@@ -25,26 +26,48 @@ class RemoteScreen extends StatelessWidget {
         ],
       ),
       body: LayoutBuilder(
-        builder: (_, constraints) {
-          final isWide = constraints.maxWidth > 650;
+        builder: (context, constraints) {
+          final padding = context.responsivePadding;
+          final maxWidth = context.isDesktop ? 600.0 : 450.0;
 
-          return ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 450),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  ConnectionSection(controller: controller),
-                  const SizedBox(height: 24),
-
-                  // Remote Controls
-                  // if (controller.isActive)
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: RemoteControls(controller: controller),
-                    ),
-                  ),
-                ],
+          return Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxWidth),
+              child: Padding(
+                padding: padding,
+                child: Column(
+                  children: [
+                    ConnectionSection(controller: controller),
+                    SizedBox(height: context.responsiveSpacing * 3),
+                    // Remote Controls: show only when active/connected
+                    if (controller.isActive)
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: RemoteControls(controller: controller),
+                        ),
+                      )
+                    else
+                      Expanded(
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'Not connected. Connect to a device to use remote controls.',
+                                textAlign: TextAlign.center,
+                              ),
+                              SizedBox(height: context.responsiveSpacing * 1.5),
+                              ElevatedButton(
+                                onPressed: () =>
+                                    Navigator.pushNamed(context, "/settings"),
+                                child: const Text('Open Settings'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           );

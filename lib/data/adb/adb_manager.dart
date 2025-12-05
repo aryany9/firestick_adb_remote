@@ -62,9 +62,9 @@ debugPrint("🔑 Initializing AdbManager");
   Future<void> connect({String? host, int? p}) =>
       _connectionHandler.connect(host: host, p: p);
 
-  Future<void> disconnect() => _connectionHandler.disconnect();
+  Future<void> disconnect() => _connectionHandler.disconnect(keepSession: true);
 
-  Future<void> sleep() => _connectionHandler.sleep();
+  // Future<void> sleep() => _connectionHandler.sleep();
 
   Future<void> wake() => _connectionHandler.wake();
 

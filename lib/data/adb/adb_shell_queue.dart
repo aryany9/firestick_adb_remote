@@ -83,7 +83,7 @@ class AdbShellQueue {
     _processingQueue = false;
   }
 
-  Future<bool> sendKeepAlive() async {
-    return _tryImmediateWrite(Uint8List.fromList(utf8.encode('\n')));
-  }
+  // Future<bool> sendKeepAlive() async {
+  //   return _tryImmediateWrite(Uint8List.fromList(utf8.encode('\n')));
+  // }
 }
