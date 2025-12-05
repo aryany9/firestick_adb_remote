@@ -70,7 +70,7 @@ class AdbKeyManager {
         // 1) Try parsing public key (usually works)
         RSAPublicKey publicKey;
         try {
-          publicKey = CryptoUtils.rsaPublicKeyFromPem(pubPem) as RSAPublicKey;
+          publicKey = CryptoUtils.rsaPublicKeyFromPem(pubPem);
         } catch (e) {
           debugPrint("Could not parse stored public key PEM: $e");
           throw Exception("Public key parse failed");
@@ -93,7 +93,7 @@ class AdbKeyManager {
           debugPrint("Attempting PKCS#1 -> PKCS#8 conversion for private key...");
           try {
             final pkcs8Pem = _convertPkcs1PemToPkcs8Pem(privPem);
-            privateKey = CryptoUtils.rsaPrivateKeyFromPem(pkcs8Pem) as RSAPrivateKey;
+            privateKey = CryptoUtils.rsaPrivateKeyFromPem(pkcs8Pem);
             // privateParsed = true;
             debugPrint("Parsed private key after PKCS#8 conversion");
             // Replace privPem variable with pkcs8Pem so file write/verify uses stable format if desired.
@@ -129,7 +129,7 @@ class AdbKeyManager {
           debugPrint("✅ Keypair signing test passed");
         } catch (e) {
           debugPrint("❌ Crypto initialization failed: $e");
-          throw e;
+          rethrow;
         }
 
         _publicKeyPem = _normalizePemNewlines(pubPem);
@@ -197,9 +197,7 @@ Future<void> _testSignature() async {
     for (int attempt = 0; attempt < 3; attempt++) {
       try {
         _keyPair = AdbCrypto.generateAdbKeyPair();
-        if (_keyPair == null ||
-            _keyPair!.publicKey == null ||
-            _keyPair!.privateKey == null) {
+        if (_keyPair == null) {
           debugPrint("Keypair generation returned null on attempt $attempt");
           continue;
         }
@@ -306,8 +304,8 @@ Future<void> _testSignature() async {
       final dir = await getApplicationDocumentsDirectory();
       final privFile = File('${dir.path}/adb_private.pem');
       final pubFile = File('${dir.path}/adb_public.pem');
-      await privFile.writeAsString(privPem, flush: true);
-      await pubFile.writeAsString(pubPem, flush: true);
+      await privFile.writeAsString(privPem, flush: false);
+      await pubFile.writeAsString(pubPem, flush: false);
     } catch (e) {
       debugPrint("File write error: $e");
     }
@@ -327,7 +325,7 @@ Future<void> _testSignature() async {
   String computeSshRsaMd5FingerprintFromPem(String pubPem) {
     try {
       // parse RSAPublicKey using basic_utils
-      final pub = CryptoUtils.rsaPublicKeyFromPem(pubPem) as RSAPublicKey;
+      final pub = CryptoUtils.rsaPublicKeyFromPem(pubPem);
       final blob = _buildSshRsaBlob(pub);
       final digest = md5.convert(blob);
       final fingerprint = digest.bytes
@@ -383,7 +381,7 @@ Future<void> _testSignature() async {
 
   String computeAndroidAdbFingerprint(String pubPem) {
   try {
-    final pub = CryptoUtils.rsaPublicKeyFromPem(pubPem) as RSAPublicKey;
+    final pub = CryptoUtils.rsaPublicKeyFromPem(pubPem);
     
     // Build Android's custom RSA public key structure
     final androidKeyBytes = AdbCrypto.convertRsaPublicKeyToAdbFormat(pub);

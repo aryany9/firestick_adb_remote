@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:firestick_adb_remote/data/adb/adb_connection_handler.dart';
 import 'package:firestick_adb_remote/data/adb/adb_key_manager.dart';
 import 'package:firestick_adb_remote/data/adb/adb_shell_queue.dart';
-import 'package:firestick_adb_remote/data/adb/constants.dart';
 import 'package:firestick_adb_remote/data/adb/models/connection_state.dart';
 import 'package:firestick_adb_remote/services/log_service.dart';
 import 'package:flutter/material.dart' hide ConnectionState;

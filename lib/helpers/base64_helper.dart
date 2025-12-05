@@ -19,7 +19,7 @@ String _keyToBase64(RSAPublicKey key) {
 RSAPublicKey _base64ToRsaPublic(String b64) {
   final bytes = base64Decode(b64);
   final pem = utf8.decode(bytes); // Reconstruct if stored as PEM bytes
-  return CryptoUtils.rsaPublicKeyFromPem(pem) as RSAPublicKey;
+  return CryptoUtils.rsaPublicKeyFromPem(pem);
 }
 
 // Convert RSA key → binary DER → base64 (storage-safe)

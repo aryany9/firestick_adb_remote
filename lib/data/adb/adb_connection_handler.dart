@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_adb/adb_connection.dart';

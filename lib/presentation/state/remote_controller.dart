@@ -122,6 +122,7 @@ class RemoteController extends ChangeNotifier {
       debugPrint("Disconnection error: $e");
       LogService.instance.log("Disconnection error: $e");
     }
+    _restoreLastDevice();
     notifyListeners();
   }
 

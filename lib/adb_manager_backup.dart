@@ -85,8 +85,8 @@ class AdbManager extends ChangeNotifier {
     final pubPem = await _storage.read(key: _publicKeyKey);
   try {
   if (privPem != null && privPem.isNotEmpty && pubPem != null && pubPem.isNotEmpty) {
-    final rsaPrivate = CryptoUtils.rsaPrivateKeyFromPem(privPem) as pc.RSAPrivateKey;
-    final rsaPublic = CryptoUtils.rsaPublicKeyFromPem(pubPem) as pc.RSAPublicKey;
+    final rsaPrivate = CryptoUtils.rsaPrivateKeyFromPem(privPem);
+    final rsaPublic = CryptoUtils.rsaPublicKeyFromPem(pubPem);
 
     if (rsaPrivate.modulus == null || rsaPublic.modulus == null) {
       debugPrint('Restored keys are invalid → regenerating');
@@ -140,9 +140,7 @@ Future<void> _openShell() async {
 Future<void> _generateNewKeypair() async {
   for (int attempt = 0; attempt < 3; attempt++) {
     _keyPair = AdbCrypto.generateAdbKeyPair();
-    if (_keyPair != null &&
-        _keyPair!.privateKey != null &&
-        _keyPair!.publicKey != null) {
+    if (_keyPair != null) {
       try {
         final privPem = CryptoUtils.encodeRSAPrivateKeyToPemPkcs1(_keyPair!.privateKey);
         final pubPem = CryptoUtils.encodeRSAPublicKeyToPemPkcs1(_keyPair!.publicKey);
@@ -375,7 +373,7 @@ try {
             // fallback: some libs accept write(Uint8List)
             try {
               // sometimes the return type is void; treat as success if no throw
-              await _shell!.write(item.bytes, true);
+              await _shell!.write(item.bytes, false);
               ok = true;
             } catch (e2) {
               debugPrint('Shell write failed (both attempts): $e / $e2');

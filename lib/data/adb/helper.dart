@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:basic_utils/basic_utils.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart'; // Add to pubspec.yaml: crypto: ^3.0.3
-import 'dart:typed_data';
 
 /// Compute Android ADB-style RSA fingerprint (MD5 of base64 public key)
 String computeAdbFingerprint(RSAPublicKey publicKey) {

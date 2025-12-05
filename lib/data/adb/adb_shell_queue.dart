@@ -59,7 +59,7 @@ class AdbShellQueue {
     try {
       final ok = await _shell!.write(bytes, false);
       if (ok) return true;
-      return await _shell!.write(bytes, true);
+      return await _shell!.write(bytes, false);
     } catch (_) {
       return false;
     }
@@ -74,7 +74,7 @@ class AdbShellQueue {
       try {
         if (_shell != null) {
           ok = await _shell!.write(item.bytes, false);
-          if (!ok) ok = await _shell!.write(item.bytes, true);
+          if (!ok) ok = await _shell!.write(item.bytes, false);
         }
       } catch (_) {}
       if (!item.completer.isCompleted) item.completer.complete(ok);
